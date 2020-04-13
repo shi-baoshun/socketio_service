@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>客户端连接聊天室测试</title>
+    <!--引入socket.io-->
+    <script type="text/javascript" src="http://cdn.staticfile.org/socket.io/1.7.4/socket.io.js"></script>
+    <script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.min.js"></script>
+</head>
+<style>
+    .base {
+        width: 40%;
+        height: 40px;
+        margin: 5px;
+    }
+</style>
+
+<body>
+    <h3>模拟客户端连接</h3>
+    <form>
+        <label>用户</label>
+        <input id="username" type="text" placeholder="请输入用户名" class="base" />
+        <br>
+        <label>角色</label>
+        <select id="role" class="base">
+            <option value="admin">管理员</option>
+            <option value="sender">发送人</option>
+            <option value="receiver">接收人</option>
+        </select>
+        <br>
+        <label>房间</label>
+        <input id="room" type="text" placeholder="请输入连接房间名" value="merchant" class="base" />
+        <br>
+        <label>Token</label>
+        <input id="token" type="text" placeholder="请输入或生成Token" value="" class="base" />
+    </form>
+    <br>
+    <button onclick="clear_text()">清空</button>
+    <button onclick="generate_token()">生成token</button>
+    <button onclick="link()">连接</button>
+    <h3>模拟客户端消息发送</h3>
+    <input id="send_txt" type="text" placeholder="请输入发送消息" class="base" /> <br>
+    <button onclick="send_msg()">发送</button>
+
+
+    <h3>模拟客户端消息接收</h3>
+    <p id="recv_msg" class="base"></p>
+</body>
+
+<script type="text/javascript">
+
+    var socket = null
+
+    var host = 'http://10.56.10.24:3000'
+
+    function generate_token() {
+        var username = $('#username').val()
+        var role = $('#role').val()
+        var room = $('#room').val()
+
+        $.get(
+            `${host}/token`,
+            {
+                username: username,
+                role: role,
+                room: room
+            },
+            function (res) {
+                console.log(res)
+                $('#token').val(res)
+            });
+    }
+
+    function clear_text() {
+        $('#username').val('')
+        $('#role').val('')
+        $('#room').val('')
+        $('#token').html('')
+    }
+
+    function link() {
+        let token = $('#token').val()
+
+        console.log("开始尝试连接socketio服务端。。。")
+        socket = io({
+            autoConnect: true,
+            query: {
+                token: token
+            }
+        })
+        // 鉴权失败
+        socket.on('error', (error, callback) => {
+            console.log("Token认证失败，错误如下：")
+            console.log(error)
+            if (error.type == 'UnauthorizedError' || error.code == 'invalid_token') {
+                // redirect user to login page perhaps?
+                let msg = error.message === 'jwt expired' ? 'Token已失效' : '非法的Token'
+                console.log(msg);
+            }
+        });
+        // 手动连接
+        socket.connect(host);
+        // 连接成功
+        socket.on('connect', (res) => {
+            console.log("握手成功！")
+        })
+        socket.on('disconnect', (reason) => {
+            if (reason === 'io server disconnect') {
+                // the disconnection was initiated by the server, you need to reconnect manually
+                // socket.connect();
+                console.log(`连接已断开！reason:${reason}`)
+            }
+            // else the socket will automatically try to reconnect
+        });
+
+        socket.on('message', (data) => {
+            console.log("接收到消息-->", data)
+            $('#recv_msg').html(data)
+        })
+
+        // 捕获服务器自定义错误
+        socket.on('CustomError', (error) => {
+            console.log(error)
+        });
+    }
+
+    function send_msg() {
+        console.log(socket)
+        let msg = $('#send_txt').val()
+        console.log('尝试广播消息:', msg)
+        socket.emit('broadcast', msg)
+    }
+
+</script>
+
+</html>
